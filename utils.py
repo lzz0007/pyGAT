@@ -31,9 +31,12 @@ def load_data(path="./data/cora/", dataset="cora"):
     features = normalize_features(features)
     adj = normalize_adj(adj + sp.eye(adj.shape[0]))
 
-    idx_train = range(140)
-    idx_val = range(200, 500)
-    idx_test = range(500, 1500)
+    # idx_train = range(140)
+    # idx_val = range(200, 500)
+    # idx_test = range(500, 1500)
+    idx_train = range(1000)
+    idx_val = range(1000, 1200)
+    idx_test = range(1200, 1500)
 
     adj = torch.FloatTensor(np.array(adj.todense()))
     features = torch.FloatTensor(np.array(features.todense()))
@@ -43,7 +46,7 @@ def load_data(path="./data/cora/", dataset="cora"):
     idx_val = torch.LongTensor(idx_val)
     idx_test = torch.LongTensor(idx_test)
 
-    return adj, features, labels, idx_train, idx_val, idx_test
+    return adj, features, labels, idx_train, idx_val, idx_test, edges
 
 
 def normalize_adj(mx):
