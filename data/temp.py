@@ -50,3 +50,10 @@ idx_val = range(int(n_nodes * 0.7), int(n_nodes * 0.8))
 max(idx_val)
 idx_test = range(int(n_nodes * 0.8), int(n_nodes))
 max(idx_test)
+
+import torch
+import torch.nn.functional as F
+a = torch.randint(0, 10, (10, 5, 2))
+b = a[0]
+c = F.one_hot(a, num_classes=10)
+torch.randint(0, 10, ())

@@ -45,20 +45,33 @@ from gnn_cnn_model.layers import EncoderLayer
 
 
 class Transformer(nn.Module):
-    def __init__(self, n_nodes, n_paths, n_label, dim, feature,
+    def __init__(self, n_nodes, n_paths, walk_length, n_label, dim, feature,
                  d_model, d_inner, d_k, d_v, n_head, n_layers, pretrain=False, p_drop=0.1, n_position=5000):
         super(Transformer, self).__init__()
         self.pretrain = pretrain
+        self.n_words = feature.shape[1]
         if pretrain:
-            self.node_emb = nn.Embedding(n_nodes, dim)
-            self.node_emb.weight.data = feature
+            # self.node_emb = nn.Embedding(n_nodes, dim)
+            # self.node_emb.weight.data = feature
             self.dim = d_model
-            self.linear = nn.Linear(dim, d_model)
+            # self.linear = nn.Linear(dim, d_model)
+            self.feature = feature
+            self.W = nn.Parameter(torch.empty(size=(self.n_words, d_model)), requires_grad=True)
+            nn.init.xavier_uniform_(self.W.data, gain=1.414)
         else:
-            self.node_emb = nn.Embedding(n_nodes, d_model)
+            self.node_emb = nn.Embedding(n_nodes, d_model*4)
             nn.init.xavier_normal_(self.node_emb.weight.data)
             self.dim = d_model
-        self.conv = convnet(n_paths, n_nodes, self.dim, feature).to(feature.device)
+        self.conv = convnet(n_paths, walk_length).to(feature.device)
+
+        self.mlp_layers = nn.Sequential(
+            nn.Dropout(p=p_drop),
+            nn.Linear(d_model*4, d_model*2),
+            nn.ReLU(),
+            nn.Dropout(p=p_drop),
+            nn.Linear(d_model*2, d_model)
+        )
+
         self.encoder = Encoder(self.dim, d_model, d_inner, d_k, d_v, n_head, n_layers, p_drop, n_position)
         self.attn = nn.Linear(d_model * 2, 2)
         self.predict_layer = nn.Linear(d_model, n_label)
@@ -66,15 +79,20 @@ class Transformer(nn.Module):
     def forward(self, targets, path_tensor):
         # tensor emb
         if self.pretrain:
-            path_tensor_emb = self.node_emb(path_tensor)
-            path_tensor_emb = self.linear(path_tensor_emb)
-            # target emb
-            target_emb = self.node_emb(targets)
-            target_emb = self.linear(target_emb)
+            # path_tensor_emb = self.node_emb(path_tensor)
+            # path_tensor_emb = self.linear(path_tensor_emb)
+            # # target emb
+            # target_emb = self.node_emb(targets)
+            # target_emb = self.linear(target_emb)
+            path_tensor = F.one_hot(path_tensor, num_classes=self.n_words).type(torch.float)
+            path_tensor_emb = torch.matmul(path_tensor, self.W)
+            target_tensor = F.one_hot(targets, num_classes=self.n_nodes)
+            target_emb = torch.mm(target_tensor, self.W)
         else:
             path_tensor_emb = self.node_emb(path_tensor) # nodes x path x length
             # target emb
             target_emb = self.node_emb(targets)
+        target_emb = self.mlp_layers(target_emb)
         conv_emb = self.conv(path_tensor_emb).squeeze(1)
 
         enc_emb, *_ = self.encoder(conv_emb, target_emb)
@@ -92,23 +110,30 @@ class Transformer(nn.Module):
 
 
 class convnet(nn.Module):
-    def __init__(self, in_channel, n_nodes, emb_dim, feature):
+    def __init__(self, in_channel, walk_length):
         super(convnet, self).__init__()
-        self.conv1 = nn.Conv2d(in_channel, 10, kernel_size=1)
-        self.conv2 = nn.Conv2d(10, 1, kernel_size=3, padding=1)
-        # self.emb = nn.Embedding(n_nodes, emb_dim)
-        # nn.init.xavier_normal_(self.emb.weight.data, gain=1.414)
-        # self.W = nn.Parameter(torch.empty(size=(emb_dim, 800)).to(feature.device), requires_grad=True)
-        # nn.init.xavier_uniform_(self.W.data, gain=1.414)
-        # self.emb.weight.data = torch.mm(feature, self.W)
+        self.conv1a = nn.Conv2d(in_channel, 16, kernel_size=(3, 3), padding=1)
+        self.conv1b = nn.Conv2d(16, 16, kernel_size=(3, 3), padding=1)
+        self.pool1 = nn.MaxPool2d(2, 2)
+        self.conv2a = nn.Conv2d(16, 32, kernel_size=(3, 3), padding=1)
+        self.conv2b = nn.Conv2d(32, 32, kernel_size=(3, 3), padding=1)
+        self.pool2 = nn.MaxPool2d(2, 2)
+        self.conv3 = nn.Conv2d(32, 1, kernel_size=1)
 
     def forward(self, x):
-        # x = self.emb(x)
-        # x = torch.mm(x, self.W)
-        x = self.conv1(x)
+        x = self.conv1a(x)
         x = torch.tanh(x)
-        x = self.conv2(x)
+        x = self.conv1b(x)
         x = torch.tanh(x)
+        x = self.pool1(x)
+
+        x = self.conv2a(x)
+        x = torch.tanh(x)
+        x = self.conv2b(x)
+        x = torch.tanh(x)
+        x = self.pool2(x)
+
+        x = self.conv3(x)
         return x
 
 

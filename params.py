@@ -39,9 +39,9 @@ def parse_args():
     parser.add_argument('--Ks', nargs='?', default='[5, 10, 20, 50, 200, 500]', help='topK recommendation')
 
     # params for deepwalk
-    parser.add_argument('--number_walks', type=int, default=5,
+    parser.add_argument('--number_walks', type=int, default=10,
                         help='Number of output nodes for training')
-    parser.add_argument('--walk_length', type=int, default=2,
+    parser.add_argument('--walk_length', type=int, default=4,
                         help='Number of output nodes for training')
     parser.add_argument('--pretrain', help='Whether to add pretrain feature', action='store_true')
     parser.add_argument('--best_model', type=str, default='best_model', help='best model file name')

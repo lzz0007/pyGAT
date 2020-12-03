@@ -50,17 +50,17 @@ def train():
 
     best_epoch = 0
     for epoch in np.arange(args.n_epoch) + 1:
-        st = time()
-        # walks_train = deepwalks(edges, undirected=True, number_walks=args.number_walks,
-        #                         walk_length=args.walk_length, seed=randint(0, 99999))
+        # st = time()
         walks_train = deepwalks(edges, undirected=True, number_walks=args.number_walks,
-                                walk_length=args.walk_length, seed=args.seed)
+                                walk_length=args.walk_length, seed=randint(0, 99999))
+        # walks_train = deepwalks(edges, undirected=True, number_walks=args.number_walks,
+        #                         walk_length=args.walk_length, seed=args.seed)
         # print('sample subgraph time:', time()-st)
-        # print(walks_train[1980])
+        # print(walks_train[0])
         model.train()
         start_time = time()
         # n_train_nodes = len(idx_train)
-        shuffled_indices = torch.randperm(n_nodes)
+        # shuffled_indices = torch.randperm(n_nodes)
 
         # scores = []
         # losses_train, losses_val = 0, 0
@@ -69,18 +69,18 @@ def train():
         optimizer.zero_grad()
         # train for users nodes
         # indices = shuffled_indices[count:min(count+args.batch_size, n_train_nodes)]
-        indices = idx_all[shuffled_indices]
-        path_tensor = subgraph_tensor(walks_train, indices)
+        # indices = idx_all[shuffled_indices]
+        path_tensor = subgraph_tensor(walks_train, idx_all)
         # target_emb = features[indices]
 
         # loss
         # item_empty = torch.tensor(item_empty, dtype=torch.long).to(device)
-        score = model(indices, path_tensor)
-        idx_train_shuffled = torch.zeros_like(idx_train)
-        for i, idx in enumerate(idx_train):
-            idx_train_shuffled[i] = torch.nonzero(indices == idx)
+        score = model(idx_all, path_tensor)
+        # idx_train_shuffled = torch.zeros_like(idx_train)
+        # for i, idx in enumerate(idx_train):
+        #     idx_train_shuffled[i] = torch.nonzero(indices == idx)
 
-        score_train = score[idx_train_shuffled]
+        score_train = score[idx_train]
         label_train = labels[idx_train]
         loss_train = criterion(score_train, label_train)
         loss_train.backward()
@@ -95,11 +95,11 @@ def train():
         # scores = torch.cat(scores, dim=0)
         acc_train = accuracy(score_train, label_train)
         # print('********************* start evaluation *********************')
-        idx_val_shuffled = torch.zeros_like(idx_val)
-        for i, idx in enumerate(idx_val):
-            idx_val_shuffled[i] = torch.nonzero(indices == idx)
-        loss_val = criterion(score[idx_val_shuffled], labels[idx_val])
-        acc_val = accuracy(score[idx_val_shuffled], labels[idx_val])
+        # idx_val_shuffled = torch.zeros_like(idx_val)
+        # for i, idx in enumerate(idx_val):
+        #     idx_val_shuffled[i] = torch.nonzero(indices == idx)
+        loss_val = criterion(score[idx_val], labels[idx_val])
+        acc_val = accuracy(score[idx_val], labels[idx_val])
         # loss_val, acc_val = eval_on_test_data(idx_val, walks_train)
         print('Epoch: {:04d}'.format(epoch),
               'loss_train: {:.4f}'.format(loss_train),
@@ -114,9 +114,9 @@ def train():
             # print('update!')
             torch.save(model.state_dict(), 'output/{}.pkl'.format(args.best_model))
             best_epoch = epoch
-        best_value, stopping_step, should_stop = early_stopping(loss_val, best_value, stopping_step, flag_step=400)
-        # if should_stop:
-        #     break
+        best_value, stopping_step, should_stop = early_stopping(loss_val, best_value, stopping_step, flag_step=100)
+        if should_stop:
+            break
     return best_epoch
 
 
@@ -135,7 +135,6 @@ def eval_on_test_data(test_data):
         # loss = criterion(score, label)
         #
         # acc_val = accuracy(score, label)
-        idx_all = torch.tensor(range(n_nodes), dtype=torch.long).to(device)
         path_tensor = subgraph_tensor(walks, idx_all)
         score = model(idx_all, path_tensor)
         loss = criterion(score[test_data], labels[test_data])
@@ -169,21 +168,22 @@ if __name__ == '__main__':
     # idx_train = torch.tensor(list(walks_train.keys()), dtype=torch.long).to(device)
     # idx_val = torch.tensor(list(walks_val.keys()), dtype=torch.long).to(device)
     # idx_test = torch.tensor(list(walks_test.keys()), dtype=torch.long).to(device)
+    idx_all = torch.tensor(range(n_nodes), dtype=torch.long).to(device)
     idx_train = idx_train.to(device)
     idx_val = idx_val.to(device)
     idx_test = idx_test.to(device)
     features = features.to(device)
     labels = labels.to(device)
-    tmp = labels[:1000].detach().cpu().numpy()
+    tmp = labels[:int(n_nodes*0.5)].detach().cpu().numpy()
     unique, counts = np.unique(tmp, return_counts=True)
     print(np.asarray((unique, counts)).T)
     # conv model
     # n_nodes, n_paths, dim, feature, d_model, d_inner, d_k, d_v, n_head, n_layers
-    model = Transformer(n_nodes, args.number_walks, n_labels, fea_dim, features.to(device), 100, 100, 100, 100, 8,
-                        args.n_layers, args.pretrain).to(device)
+    model = Transformer(n_nodes, args.number_walks, args.walk_length, n_labels, fea_dim, features.to(device),
+                        100, 100, 100, 100, 8, args.n_layers, True).to(device)
 
     # model = recomm(transformer, 2, fea_dim, n_labels).to(device)
-    optimizer = torch.optim.AdamW(model.parameters(), weight_decay=1e-3, lr=args.max_lr)
+    optimizer = torch.optim.Adam(model.parameters(), weight_decay=1e-3, lr=args.max_lr)
     criterion = nn.CrossEntropyLoss()
 
     best_epoch = train()
