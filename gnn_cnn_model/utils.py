@@ -30,7 +30,7 @@ def index_mapping_dict(nodes):
 
 def early_stopping(log_value, best_value, stopping_step, flag_step=3):
     # early stopping strategy:
-    if best_value is None or log_value > best_value:
+    if best_value is None or log_value < best_value:
         stopping_step = 0
         best_value = log_value
     else:

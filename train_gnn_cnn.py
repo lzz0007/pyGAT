@@ -15,7 +15,7 @@ from gnn_cnn_model.model import *
 from gnn_cnn_model.utils import *
 
 from params import args
-from utils import load_data, accuracy
+from utils import load_data, accuracy, load_data_wiki
 
 if args.cuda != -1:
     device = torch.device("cuda:" + str(args.cuda))
@@ -25,18 +25,17 @@ else:
 print(os.getcwd())
 
 
-def sample_subgraph(walks, indices):
-    subgraph_walks = defaultdict(lambda: [])
+def subgraph_tensor(walks, indices):
+    a = []
     # may have duplicated keys so use i as the key
     for i, target_node in enumerate(indices):
         paths = walks[int(target_node)]
+        b = []
         for path in paths:
-            subgraph_walks[i].append([int(n) for n in path]) # need to convert the node into int
-
-    a = []
-    for k, v in subgraph_walks.items():
-        v_tensor = torch.tensor(v, dtype=torch.long)
-        a.append(v_tensor)
+            p = [int(n) for n in path]
+            b.append(p)
+        b_tensor = torch.tensor(b, dtype=torch.long)
+        a.append(b_tensor)
 
     out = torch.stack(a).to(device)
     return out
@@ -51,6 +50,13 @@ def train():
 
     best_epoch = 0
     for epoch in np.arange(args.n_epoch) + 1:
+        st = time()
+        # walks_train = deepwalks(edges, undirected=True, number_walks=args.number_walks,
+        #                         walk_length=args.walk_length, seed=randint(0, 99999))
+        walks_train = deepwalks(edges, undirected=True, number_walks=args.number_walks,
+                                walk_length=args.walk_length, seed=args.seed)
+        # print('sample subgraph time:', time()-st)
+        # print(walks_train[1980])
         model.train()
         start_time = time()
         # n_train_nodes = len(idx_train)
@@ -64,7 +70,7 @@ def train():
         # train for users nodes
         # indices = shuffled_indices[count:min(count+args.batch_size, n_train_nodes)]
         indices = idx_all[shuffled_indices]
-        path_tensor = sample_subgraph(walks_train, indices)
+        path_tensor = subgraph_tensor(walks_train, indices)
         # target_emb = features[indices]
 
         # loss
@@ -103,18 +109,20 @@ def train():
               'time: {:.4f}s'.format(end_time-start_time))
 
         # print('********************* end evaluation *********************')
-        # best_value, stopping_step, should_stop = early_stopping(loss_val, best_value, stopping_step, flag_step=3)
-        if loss_val.detach().cpu().item() < best_value:
+        loss_val = loss_val.detach().cpu().item()
+        if loss_val < best_value:
             # print('update!')
-            torch.save(model.state_dict(), 'output/{}.pkl'.format('best_model'))
-            best_value = loss_val.detach().cpu().item()
+            torch.save(model.state_dict(), 'output/{}.pkl'.format(args.best_model))
             best_epoch = epoch
+        best_value, stopping_step, should_stop = early_stopping(loss_val, best_value, stopping_step, flag_step=400)
         # if should_stop:
         #     break
     return best_epoch
 
 
 def eval_on_test_data(test_data):
+    walks = deepwalks(edges, undirected=True, number_walks=args.number_walks,
+                      walk_length=args.walk_length, seed=args.seed)
     model.eval()
     with torch.no_grad():
         # indices = test_data
@@ -128,7 +136,7 @@ def eval_on_test_data(test_data):
         #
         # acc_val = accuracy(score, label)
         idx_all = torch.tensor(range(n_nodes), dtype=torch.long).to(device)
-        path_tensor = sample_subgraph(walks_train, idx_all)
+        path_tensor = subgraph_tensor(walks, idx_all)
         score = model(idx_all, path_tensor)
         loss = criterion(score[test_data], labels[test_data])
         acc = accuracy(score[test_data], labels[test_data])
@@ -136,7 +144,8 @@ def eval_on_test_data(test_data):
 
 
 if __name__ == '__main__':
-    adj, features, labels, idx_train, idx_val, idx_test, edges = load_data()
+    # adj, features, labels, idx_train, idx_val, idx_test, edges = load_data()
+    adj, features, labels, idx_train, idx_val, idx_test, edges = load_data_wiki(dataset='chameleon')
 
     n_nodes = adj.shape[0]
     # tmp = torch.unique(labels)
@@ -144,15 +153,15 @@ if __name__ == '__main__':
     fea_dim = features.shape[1]
 
     # deepwalk
-    print('********************* walk for train val test *********************')
-    walks_train = deepwalks(edges, undirected=True, number_walks=args.number_walks,
-                            walk_length=args.walk_length, seed=args.seed)
+    # print('********************* walk for train val test *********************')
+    # walks_train = deepwalks(edges, undirected=True, number_walks=args.number_walks,
+    #                         walk_length=args.walk_length, seed=args.seed)
     # walks_val = deepwalks(edges, idx_val, undirected=True, number_walks=args.number_walks,
     #                       walk_length=args.walk_length, seed=args.seed)
     # walks_test = deepwalks(edges, idx_test, undirected=True, number_walks=args.number_walks,
     #                        walk_length=args.walk_length, seed=args.seed)
 
-    check_walk_length(walks_train, args.walk_length)
+    # check_walk_length(walks_train, args.walk_length)
     # check_walk_length(walks_val, args.walk_length)
     # check_walk_length(walks_test, args.walk_length)
 
@@ -170,7 +179,8 @@ if __name__ == '__main__':
     print(np.asarray((unique, counts)).T)
     # conv model
     # n_nodes, n_paths, dim, feature, d_model, d_inner, d_k, d_v, n_head, n_layers
-    model = Transformer(n_nodes, args.number_walks, n_labels, fea_dim, features.to(device), 100, 100, 100, 100, 8, args.n_layers).to(device)
+    model = Transformer(n_nodes, args.number_walks, n_labels, fea_dim, features.to(device), 100, 100, 100, 100, 8,
+                        args.n_layers, args.pretrain).to(device)
 
     # model = recomm(transformer, 2, fea_dim, n_labels).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), weight_decay=1e-3, lr=args.max_lr)
@@ -179,7 +189,7 @@ if __name__ == '__main__':
     best_epoch = train()
 
     # start test
-    model.load_state_dict(torch.load('output/{}.pkl'.format('best_model')))
+    model.load_state_dict(torch.load('output/{}.pkl'.format(args.best_model)))
     loss_test, acc_test = eval_on_test_data(idx_test)
     print("best epoch:", best_epoch)
     print("Test set results:",

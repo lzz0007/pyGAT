@@ -48,11 +48,12 @@ class Transformer(nn.Module):
     def __init__(self, n_nodes, n_paths, n_label, dim, feature,
                  d_model, d_inner, d_k, d_v, n_head, n_layers, pretrain=False, p_drop=0.1, n_position=5000):
         super(Transformer, self).__init__()
-
+        self.pretrain = pretrain
         if pretrain:
             self.node_emb = nn.Embedding(n_nodes, dim)
             self.node_emb.weight.data = feature
-            self.dim = dim
+            self.dim = d_model
+            self.linear = nn.Linear(dim, d_model)
         else:
             self.node_emb = nn.Embedding(n_nodes, d_model)
             nn.init.xavier_normal_(self.node_emb.weight.data)
@@ -64,12 +65,17 @@ class Transformer(nn.Module):
 
     def forward(self, targets, path_tensor):
         # tensor emb
-        path_tensor_emb = self.node_emb(path_tensor)
-        conv_emb = self.conv(path_tensor_emb).squeeze()
-
-        # target emb
-        target_emb = self.node_emb(targets)
-        # target_emb = torch.mm(target_emb, self.T)
+        if self.pretrain:
+            path_tensor_emb = self.node_emb(path_tensor)
+            path_tensor_emb = self.linear(path_tensor_emb)
+            # target emb
+            target_emb = self.node_emb(targets)
+            target_emb = self.linear(target_emb)
+        else:
+            path_tensor_emb = self.node_emb(path_tensor) # nodes x path x length
+            # target emb
+            target_emb = self.node_emb(targets)
+        conv_emb = self.conv(path_tensor_emb).squeeze(1)
 
         enc_emb, *_ = self.encoder(conv_emb, target_emb)
         enc_emb = enc_emb.squeeze()

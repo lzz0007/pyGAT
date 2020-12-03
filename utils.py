@@ -1,6 +1,7 @@
 import numpy as np
 import scipy.sparse as sp
 import torch
+import json
 
 
 def encode_onehot(labels):
@@ -8,6 +9,51 @@ def encode_onehot(labels):
     classes_dict = {c: np.identity(len(classes))[i, :] for i, c in enumerate(classes)}
     labels_onehot = np.array(list(map(classes_dict.get, labels)), dtype=np.int32)
     return labels_onehot
+
+
+def load_data_wiki(dataset):
+    import pandas as pd
+    print('Loading {} dataset...'.format(dataset))
+    feature_path = './data/wikipedia/' + str(dataset) + '/musae_' + str(dataset) + '_features.json'
+    with open(feature_path) as f:
+        features = json.load(f) # a dictionary for each node
+    n_nodes = len(features)
+    row, col = [], []
+    for i in range(n_nodes):
+        word_indices = features[str(i)]
+        for w in word_indices:
+            row.append(i)
+            col.append(w)
+    row = np.array(row)
+    col = np.array(col)
+    data = [1] * row.shape[0]
+    features = sp.csr_matrix((data, (row, col)), shape=(n_nodes, max(col)+1), dtype=np.float32)
+    features = normalize_features(features)
+
+    edges = pd.read_csv('./data/wikipedia/' + str(dataset) + '/musae_' + str(dataset) + '_edges.csv')
+    edges = edges.to_numpy()
+    adj = sp.coo_matrix((np.ones(edges.shape[0]), (edges[:, 0], edges[:, 1])), shape=(n_nodes, n_nodes), dtype=np.float32)
+    adj = adj + adj.T.multiply(adj.T > adj) - adj.multiply(adj.T > adj)
+    adj = normalize_adj(adj + sp.eye(adj.shape[0]))
+
+    targets = pd.read_csv('./data/wikipedia/' + str(dataset) + '/musae_' + str(dataset) + '_target_label.csv')
+    targets = targets.sort_values(by=['id'])
+    labels = targets.label.to_numpy()
+    labels = encode_onehot(labels)
+
+    idx_train = range(int(n_nodes*0.5))
+    idx_val = range(int(n_nodes*0.5), int(n_nodes*0.7))
+    idx_test = range(int(n_nodes*0.7), int(n_nodes))
+
+    adj = torch.FloatTensor(np.array(adj.todense()))
+    features = torch.FloatTensor(np.array(features.todense()))
+    labels = torch.LongTensor(np.where(labels)[1])
+
+    idx_train = torch.LongTensor(idx_train)
+    idx_val = torch.LongTensor(idx_val)
+    idx_test = torch.LongTensor(idx_test)
+
+    return adj, features, labels, idx_train, idx_val, idx_test, edges
 
 
 def load_data(path="./data/cora/", dataset="cora"):

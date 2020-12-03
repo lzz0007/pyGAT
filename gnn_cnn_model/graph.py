@@ -136,17 +136,25 @@ class Graph(defaultdict):
       # Sampling is uniform w.r.t V, and not w.r.t E
       path = [rand.choice(list(G.keys()))]
 
-    while len(path) < path_length:
+    while len(path) < path_length+1:
       cur = path[-1]
-      if len(G[cur]) > 0:
-        path.append(rand.choice(G[cur]))
+      tmp = G[cur]
+      if len(G[cur]) == 1 and G[cur][0] == start:
+        path.append(cur)
+      elif len(G[cur]) > 0:
+        sampled_node = rand.choice(G[cur])
+        while sampled_node == start:
+          sampled_node = rand.choice(G[cur])
+        path.append(sampled_node)
         # if rand.random() >= alpha:
         #   path.append(rand.choice(G[cur]))
         # else:
         #   path.append(path[0])
       else:
         break
-    return [str(node) for node in path]
+    res = [str(node) for node in path]
+    res.pop(0)
+    return res
 
 # TODO add build_walks in here
 
@@ -164,7 +172,7 @@ def build_deepwalk_corpus(G, num_paths, path_length, alpha=0,
       else:
         walks[node] = []
         walks[node].append(G.random_walk(path_length, rand=rand, alpha=alpha, start=node))
-  
+
   return walks
 
 def build_deepwalk_corpus_iter(G, num_paths, path_length, alpha=0,
