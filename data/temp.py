@@ -3,7 +3,7 @@ import numpy as np
 import os
 
 os.getcwd()
-target = pd.read_csv('data/wikipedia/chameleon/musae_chameleon_target.csv')
+target = pd.read_csv('data/wikipedia/crocodile/musae_crocodile_target.csv')
 max_target = max(target.target)
 min_target = min(target.target)
 interval = (max_target-min_target)/5
@@ -25,7 +25,7 @@ def f(row):
 
 target['label'] = target.apply(f, axis=1)
 target.groupby(['label']).agg(['count'])
-target.to_csv('data/wikipedia/chameleon/musae_chameleon_target_label.csv', index=False)
+target.to_csv('data/wikipedia/crocodile/musae_crocodile_target_label.csv', index=False)
 
 import json
 dataset = 'chameleon'
@@ -54,6 +54,63 @@ max(idx_test)
 import torch
 import torch.nn.functional as F
 a = torch.randint(0, 10, (10, 5, 2))
-b = a[0]
+b = F.one_hot(torch.arange(0, 10) % 3)
+b.shape
+input = torch.tensor([[1,2,4,5],[4,3,2,9]])
+embedding_matrix = torch.rand(10, 3)
+embedding_matrix
+F.embedding(input, embedding_matrix)
 c = F.one_hot(a, num_classes=10)
-torch.randint(0, 10, ())
+
+a = torch.Tensor([[1, 2, 3], [1, 2, 3]]).view(-1, 2)
+b = torch.Tensor([[2, 1]]).view(2, -1)
+print(a)
+print(a.size())
+
+print(b)
+print(b.size())
+a.t()*b
+a.t()
+b
+
+
+class NoamOpt:
+    "Optim wrapper that implements rate."
+
+    def __init__(self, model_size, factor, warmup, optimizer):
+        self.optimizer = optimizer
+        self._step = 0
+        self.warmup = warmup
+        self.factor = factor
+        self.model_size = model_size
+        self._rate = 0
+
+    def step(self):
+        "Update parameters and rate"
+        self._step += 1
+        rate = self.rate()
+        for p in self.optimizer.param_groups:
+            p['lr'] = rate
+        self._rate = rate
+        self.optimizer.step()
+
+    def rate(self, step=None):
+        "Implement `lrate` above"
+        if step is None:
+            step = self._step
+        return self.factor * \
+               (self.model_size ** (-0.5) *
+                min(step ** (-0.5), step * self.warmup ** (-1.5)))
+
+
+def get_std_opt(model):
+    return NoamOpt(model.src_embed[0].d_model, 2, 4000,
+                   torch.optim.Adam(model.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9))
+
+import matplotlib.pyplot as plt
+import numpy as np
+opts = [NoamOpt(100, 1, 400, None),
+        NoamOpt(100, 1, 4000, None),
+        NoamOpt(100, 1, 8000, None)]
+plt.plot(np.arange(1, 20000), [[opt.rate(i) for opt in opts] for i in range(1, 20000)])
+plt.legend(["512:4000", "512:8000", "256:4000"])

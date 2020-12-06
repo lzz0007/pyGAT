@@ -18,4 +18,6 @@ class ScaledDotProductAttention(nn.Module):
         attn = self.dropout(F.softmax(attn, dim=-1))
         output = torch.matmul(attn, v)
 
+        # output2 = attn.permute(0, 1, 3, 2)*v
+
         return output, attn

@@ -51,12 +51,11 @@ def train():
     best_epoch = 0
     for epoch in np.arange(args.n_epoch) + 1:
         # st = time()
-        walks_train = deepwalks(edges, undirected=True, number_walks=args.number_walks,
-                                walk_length=args.walk_length, seed=randint(0, 99999))
         # walks_train = deepwalks(edges, undirected=True, number_walks=args.number_walks,
-        #                         walk_length=args.walk_length, seed=args.seed)
+        #                         walk_length=args.walk_length, seed=randint(0, 99999))
+        walks_train = deepwalks(edges, undirected=True, number_walks=args.number_walks,
+                                walk_length=args.walk_length, seed=args.seed)
         # print('sample subgraph time:', time()-st)
-        # print(walks_train[0])
         model.train()
         start_time = time()
         # n_train_nodes = len(idx_train)
@@ -114,15 +113,15 @@ def train():
             # print('update!')
             torch.save(model.state_dict(), 'output/{}.pkl'.format(args.best_model))
             best_epoch = epoch
-        best_value, stopping_step, should_stop = early_stopping(loss_val, best_value, stopping_step, flag_step=100)
+        best_value, stopping_step, should_stop = early_stopping(loss_val, best_value, stopping_step, flag_step=150)
         if should_stop:
             break
     return best_epoch
 
 
-def eval_on_test_data(test_data):
+def eval_on_test_data(test_data, seed):
     walks = deepwalks(edges, undirected=True, number_walks=args.number_walks,
-                      walk_length=args.walk_length, seed=args.seed)
+                      walk_length=args.walk_length, seed=seed)
     model.eval()
     with torch.no_grad():
         # indices = test_data
@@ -143,8 +142,8 @@ def eval_on_test_data(test_data):
 
 
 if __name__ == '__main__':
-    # adj, features, labels, idx_train, idx_val, idx_test, edges = load_data()
-    adj, features, labels, idx_train, idx_val, idx_test, edges = load_data_wiki(dataset='chameleon')
+    adj, features, labels, idx_train, idx_val, idx_test, edges = load_data()
+    # adj, features, labels, idx_train, idx_val, idx_test, edges = load_data_wiki(dataset='chameleon')
 
     n_nodes = adj.shape[0]
     # tmp = torch.unique(labels)
@@ -183,14 +182,20 @@ if __name__ == '__main__':
                         100, 100, 100, 100, 8, args.n_layers, True).to(device)
 
     # model = recomm(transformer, 2, fea_dim, n_labels).to(device)
-    optimizer = torch.optim.Adam(model.parameters(), weight_decay=1e-3, lr=args.max_lr)
+    optimizer = torch.optim.Adam(model.parameters(), weight_decay=1e-3, lr=args.lr)
     criterion = nn.CrossEntropyLoss()
 
     best_epoch = train()
 
     # start test
     model.load_state_dict(torch.load('output/{}.pkl'.format(args.best_model)))
-    loss_test, acc_test = eval_on_test_data(idx_test)
+    loss_test, acc_test = eval_on_test_data(idx_test, args.seed)
+    print("best epoch:", best_epoch)
+    print("Test set results:",
+          "loss= {:.4f}".format(loss_test.detach().cpu().item()),
+          "accuracy= {:.4f}".format(acc_test.detach().cpu().item()))
+
+    loss_test, acc_test = eval_on_test_data(idx_test, args.seed+100)
     print("best epoch:", best_epoch)
     print("Test set results:",
           "loss= {:.4f}".format(loss_test.detach().cpu().item()),

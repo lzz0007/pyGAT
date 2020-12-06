@@ -59,18 +59,18 @@ class Transformer(nn.Module):
             self.W = nn.Parameter(torch.empty(size=(self.n_words, d_model)), requires_grad=True)
             nn.init.xavier_uniform_(self.W.data, gain=1.414)
         else:
-            self.node_emb = nn.Embedding(n_nodes, d_model*4)
+            self.node_emb = nn.Embedding(n_nodes, d_model)
             nn.init.xavier_normal_(self.node_emb.weight.data)
             self.dim = d_model
-        self.conv = convnet(n_paths, walk_length).to(feature.device)
+        self.conv = convnet(n_paths, d_model).to(feature.device)
 
-        self.mlp_layers = nn.Sequential(
-            nn.Dropout(p=p_drop),
-            nn.Linear(d_model*4, d_model*2),
-            nn.ReLU(),
-            nn.Dropout(p=p_drop),
-            nn.Linear(d_model*2, d_model)
-        )
+        # self.mlp_layers = nn.Sequential(
+        #     nn.Dropout(p=p_drop),
+        #     nn.Linear(d_model*4, d_model*2),
+        #     nn.ReLU(),
+        #     nn.Dropout(p=p_drop),
+        #     nn.Linear(d_model*2, d_model)
+        # )
 
         self.encoder = Encoder(self.dim, d_model, d_inner, d_k, d_v, n_head, n_layers, p_drop, n_position)
         self.attn = nn.Linear(d_model * 2, 2)
@@ -84,15 +84,15 @@ class Transformer(nn.Module):
             # # target emb
             # target_emb = self.node_emb(targets)
             # target_emb = self.linear(target_emb)
-            path_tensor = F.one_hot(path_tensor, num_classes=self.n_words).type(torch.float)
+            path_tensor = F.embedding(path_tensor, self.feature)
             path_tensor_emb = torch.matmul(path_tensor, self.W)
-            target_tensor = F.one_hot(targets, num_classes=self.n_nodes)
-            target_emb = torch.mm(target_tensor, self.W)
+            target_tensor = F.embedding(targets, self.feature)
+            target_emb = torch.matmul(target_tensor, self.W)
         else:
             path_tensor_emb = self.node_emb(path_tensor) # nodes x path x length
             # target emb
             target_emb = self.node_emb(targets)
-        target_emb = self.mlp_layers(target_emb)
+        # target_emb = self.mlp_layers(target_emb)
         conv_emb = self.conv(path_tensor_emb).squeeze(1)
 
         enc_emb, *_ = self.encoder(conv_emb, target_emb)
@@ -110,30 +110,34 @@ class Transformer(nn.Module):
 
 
 class convnet(nn.Module):
-    def __init__(self, in_channel, walk_length):
+    def __init__(self, in_channel, dim):
         super(convnet, self).__init__()
-        self.conv1a = nn.Conv2d(in_channel, 16, kernel_size=(3, 3), padding=1)
-        self.conv1b = nn.Conv2d(16, 16, kernel_size=(3, 3), padding=1)
-        self.pool1 = nn.MaxPool2d(2, 2)
-        self.conv2a = nn.Conv2d(16, 32, kernel_size=(3, 3), padding=1)
-        self.conv2b = nn.Conv2d(32, 32, kernel_size=(3, 3), padding=1)
-        self.pool2 = nn.MaxPool2d(2, 2)
-        self.conv3 = nn.Conv2d(32, 1, kernel_size=1)
+        # self.conv1a = nn.Conv2d(in_channel, 16, kernel_size=(3, 3), padding=1)
+        # self.conv1b = nn.Conv2d(16, 16, kernel_size=(3, 3), padding=1)
+        # self.pool1 = nn.MaxPool2d(2, 2)
+        # self.conv2a = nn.Conv2d(16, 32, kernel_size=(3, 3), padding=1)
+        # self.conv2b = nn.Conv2d(32, 32, kernel_size=(3, 3), padding=1)
+        # self.pool2 = nn.MaxPool2d(2, 2)
+
+        self.conv1 = nn.Conv2d(in_channel, 32, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(32, 1, kernel_size=1)
 
     def forward(self, x):
-        x = self.conv1a(x)
-        x = torch.tanh(x)
-        x = self.conv1b(x)
-        x = torch.tanh(x)
-        x = self.pool1(x)
+        # x = self.conv1a(x)
+        # x = torch.tanh(x)
+        # x = self.conv1b(x)
+        # x = torch.tanh(x)
+        # x = self.pool1(x)
+        #
+        # x = self.conv2a(x)
+        # x = torch.tanh(x)
+        # x = self.conv2b(x)
+        # x = torch.tanh(x)
+        # x = self.pool2(x)
 
-        x = self.conv2a(x)
-        x = torch.tanh(x)
-        x = self.conv2b(x)
-        x = torch.tanh(x)
-        x = self.pool2(x)
-
-        x = self.conv3(x)
+        x = self.conv1(x)
+        x = torch.relu(x)
+        x = self.conv2(x)
         return x
 
 
@@ -183,7 +187,7 @@ class PositionalEncoding(nn.Module):
         self.register_buffer('pe', pe)
 
     def forward(self, x):
-        x = x + self.pe[:, :x.size(1)].clone().detach()
+        x = x + self.pe[:, 1:x.size(1)+1].clone().detach()
         return self.dropout(x)
 
 
