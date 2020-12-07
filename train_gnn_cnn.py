@@ -51,58 +51,55 @@ def train():
     best_epoch = 0
     for epoch in np.arange(args.n_epoch) + 1:
         # st = time()
+        seed1 = randint(0, 99999)
+        seed2 = randint(0, 99999)
         walks_train_1 = deepwalks(edges, undirected=True, number_walks=args.number_walks,
-                                walk_length=args.walk_length, seed=randint(0, 99999))
+                                walk_length=args.walk_length, seed=seed1)
         walks_train_2 = deepwalks(edges, undirected=True, number_walks=args.number_walks,
-                                walk_length=args.walk_length, seed=randint(0, 99999))
+                                walk_length=args.walk_length, seed=seed2)
+        path_tensor_1 = subgraph_tensor(walks_train_1, idx_all)
+        path_tensor_2 = subgraph_tensor(walks_train_2, idx_all)
         # print('sample subgraph time:', time()-st)
         model.train()
         start_time = time()
-        # n_train_nodes = len(idx_train)
-        # shuffled_indices = torch.randperm(n_nodes)
+        n_train_nodes = len(idx_train)
+        shuffled_indices = torch.randperm(n_train_nodes)
 
-        # scores = []
-        # losses_train, losses_val = 0, 0
+        scores = []
+        losses_train, losses_val = 0, 0
 
-        # for batch, count in enumerate(range(0, n_train_nodes, args.batch_size)):
-        optimizer.zero_grad()
-        # train for users nodes
-        # indices = shuffled_indices[count:min(count+args.batch_size, n_train_nodes)]
-        # indices = idx_all[shuffled_indices]
-        path_tensor_1 = subgraph_tensor(walks_train_1, idx_all)
-        path_tensor_2 = subgraph_tensor(walks_train_2, idx_all)
-        # target_emb = features[indices]
+        for batch, count in enumerate(range(0, n_train_nodes, args.batch_size)):
+            optimizer.zero_grad()
+            # train for users nodes
+            indices = shuffled_indices[count:min(count+args.batch_size, n_train_nodes)]
+            indices = idx_train[indices]
 
-        # loss
-        # item_empty = torch.tensor(item_empty, dtype=torch.long).to(device)
-        score, ssl = model(idx_all, path_tensor_1, path_tensor_2)
-        # idx_train_shuffled = torch.zeros_like(idx_train)
-        # for i, idx in enumerate(idx_train):
-        #     idx_train_shuffled[i] = torch.nonzero(indices == idx)
+            # target_emb = features[indices]
 
-        score_train = score[idx_train]
-        label_train = labels[idx_train]
-        loss_train = criterion(score[idx_train], labels[idx_train], ssl[idx_train])
-        loss_train.backward()
-        optimizer.step()
+            # loss
+            # item_empty = torch.tensor(item_empty, dtype=torch.long).to(device)
+            tmp = path_tensor_1[indices]
+            score, ssl = model(indices, path_tensor_1[indices], path_tensor_2[indices])
+            # idx_train_shuffled = torch.zeros_like(idx_train)
+            # for i, idx in enumerate(idx_train):
+            #     idx_train_shuffled[i] = torch.nonzero(indices == idx)
 
-        # losses_train += loss_train
-        # scores.append(score)
+            loss_train = criterion(score, labels[indices], ssl)
+            loss_train.backward()
+            optimizer.step()
+
+            losses_train += loss_train
+            scores.append(score)
 
         end_time = time()
 
-        # label = labels[shuffled_indices]
-        # scores = torch.cat(scores, dim=0)
-        acc_train = accuracy(score_train, label_train)
-        # print('********************* start evaluation *********************')
-        # idx_val_shuffled = torch.zeros_like(idx_val)
-        # for i, idx in enumerate(idx_val):
-        #     idx_val_shuffled[i] = torch.nonzero(indices == idx)
-        loss_val = criterion(score[idx_val], labels[idx_val], ssl[idx_val])
-        acc_val = accuracy(score[idx_val], labels[idx_val])
-        # loss_val, acc_val = eval_on_test_data(idx_val, walks_train)
+        score_train = torch.cat(scores, dim=0)
+        acc_train = accuracy(score_train, labels[idx_train][shuffled_indices])
+        # loss_val = criterion(score[idx_val], labels[idx_val], ssl[idx_val])
+        # acc_val = accuracy(score[idx_val], labels[idx_val])
+        loss_val, acc_val = eval_on_test_data(idx_val, seed1)
         print('Epoch: {:04d}'.format(epoch),
-              'loss_train: {:.4f}'.format(loss_train),
+              'loss_train: {:.4f}'.format(losses_train),
               'acc_train: {:.4f}'.format(acc_train),
               'loss_val: {:.4f}'.format(loss_val.data.item()),
               'acc_val: {:.4f}'.format(acc_val.data.item()),
@@ -148,7 +145,7 @@ def eval_on_test_data(test_data, seed):
 def criterion(score, label, ssl):
     loss = F.cross_entropy(score, label)
     tmp = torch.sum(ssl)
-    loss = loss + torch.sum(ssl)
+    loss = loss*10 + torch.sum(ssl)
     return loss
 
 

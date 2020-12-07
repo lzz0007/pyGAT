@@ -13,8 +13,8 @@ def parse_args():
     #                     help='The address of preprocessed graph.')
     parser.add_argument('--seed', type=int, default=12345,
                         help='seed number')
-    # parser.add_argument('--batch_size', type=int, default=32,
-    #                     help='Number of output nodes for training')
+    parser.add_argument('--batch_size', type=int, default=32,
+                        help='Number of output nodes for training')
     parser.add_argument('--n_epoch', type=int, default=1000,
                         help='Number of epoch to run')
     # parser.add_argument('--n_batch', type=int, default=128,
@@ -41,7 +41,7 @@ def parse_args():
     # params for deepwalk
     parser.add_argument('--number_walks', type=int, default=5,
                         help='Number of output nodes for training')
-    parser.add_argument('--walk_length', type=int, default=1,
+    parser.add_argument('--walk_length', type=int, default=2,
                         help='Number of output nodes for training')
     parser.add_argument('--pretrain', help='Whether to add pretrain feature', action='store_true')
     parser.add_argument('--best_model', type=str, default='best_model', help='best model file name')
