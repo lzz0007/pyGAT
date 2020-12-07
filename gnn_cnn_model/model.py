@@ -76,25 +76,40 @@ class Transformer(nn.Module):
         self.attn = nn.Linear(d_model * 2, 2)
         self.predict_layer = nn.Linear(d_model, n_label)
 
-    def forward(self, targets, path_tensor):
+        self.cos_sim = nn.CosineSimilarity(dim=1, eps=1e-6)
+
+    def forward(self, targets, path_tensor_1, path_tensor_2):
         # tensor emb
         if self.pretrain:
-            # path_tensor_emb = self.node_emb(path_tensor)
-            # path_tensor_emb = self.linear(path_tensor_emb)
-            # # target emb
-            # target_emb = self.node_emb(targets)
-            # target_emb = self.linear(target_emb)
-            path_tensor = F.embedding(path_tensor, self.feature)
-            path_tensor_emb = torch.matmul(path_tensor, self.W)
+            path_tensor_1 = F.embedding(path_tensor_1, self.feature)
+            path_tensor_emb_1 = torch.matmul(path_tensor_1, self.W)
+            path_tensor_2 = F.embedding(path_tensor_2, self.feature)
+            path_tensor_emb_2 = torch.matmul(path_tensor_2, self.W)
+
             target_tensor = F.embedding(targets, self.feature)
             target_emb = torch.matmul(target_tensor, self.W)
         else:
-            path_tensor_emb = self.node_emb(path_tensor) # nodes x path x length
-            # target emb
+            path_tensor_emb_1 = self.node_emb(path_tensor_1) # nodes x path x length
+            path_tensor_emb_2 = self.node_emb(path_tensor_2)
+
             target_emb = self.node_emb(targets)
         # target_emb = self.mlp_layers(target_emb)
-        conv_emb = self.conv(path_tensor_emb).squeeze(1)
+        conv_emb_1 = self.conv(path_tensor_emb_1).squeeze(1)
+        conv_emb_2 = self.conv(path_tensor_emb_2).squeeze(1)
 
+        attended_1 = self.trans_emb(target_emb, conv_emb_1)
+        attended_2 = self.trans_emb(target_emb, conv_emb_2)
+
+        same = torch.exp(self.cos_sim(attended_1, attended_2))
+
+        sim = sim_matrix(attended_1, attended_1).detach()
+        # sim_2 = self.sim_matrix(conv_emb_2, conv_emb_2)
+        diff = torch.sum(sim, dim=1)
+        ssl = -torch.log(same/diff)
+        score = self.predict_layer(attended_1)
+        return score, ssl
+
+    def trans_emb(self, target_emb, conv_emb):
         enc_emb, *_ = self.encoder(conv_emb, target_emb)
         enc_emb = enc_emb.squeeze()
 
@@ -104,9 +119,21 @@ class Transformer(nn.Module):
         score_t = score[:, 0].unsqueeze(1)
         score_i = score[:, 1].unsqueeze(1)
         attended = score_t * target_emb + score_i * enc_emb
+        return attended
 
-        score = self.predict_layer(attended)
-        return score
+
+def sim_matrix(a, b, tau=1, eps=1e-8):
+    """
+    added eps for numerical stability
+    """
+    a_n, b_n = a.norm(dim=1)[:, None], b.norm(dim=1)[:, None]
+    a_norm = a / torch.max(a_n, eps * torch.ones_like(a_n))
+    b_norm = b / torch.max(b_n, eps * torch.ones_like(b_n))
+    sim_mt = torch.mm(a_norm, b_norm.transpose(0, 1))
+    sim_mt = sim_mt/tau
+    sim_mt = torch.exp(sim_mt)
+    sim_mt = sim_mt.fill_diagonal_(0)
+    return sim_mt
 
 
 class convnet(nn.Module):

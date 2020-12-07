@@ -73,7 +73,7 @@ a.t()*b
 a.t()
 b
 
-
+torch.sum(a, dim=1)
 class NoamOpt:
     "Optim wrapper that implements rate."
 
@@ -114,3 +114,10 @@ opts = [NoamOpt(100, 1, 400, None),
         NoamOpt(100, 1, 8000, None)]
 plt.plot(np.arange(1, 20000), [[opt.rate(i) for opt in opts] for i in range(1, 20000)])
 plt.legend(["512:4000", "512:8000", "256:4000"])
+
+
+import torch.nn as nn
+input1 = torch.randn(1, 128)
+input2 = torch.randn(100, 128)
+cos = nn.CosineSimilarity(dim=1, eps=1e-6)
+output = cos(input1, input2)

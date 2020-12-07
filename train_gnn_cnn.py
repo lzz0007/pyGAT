@@ -51,10 +51,10 @@ def train():
     best_epoch = 0
     for epoch in np.arange(args.n_epoch) + 1:
         # st = time()
-        # walks_train = deepwalks(edges, undirected=True, number_walks=args.number_walks,
-        #                         walk_length=args.walk_length, seed=randint(0, 99999))
-        walks_train = deepwalks(edges, undirected=True, number_walks=args.number_walks,
-                                walk_length=args.walk_length, seed=args.seed)
+        walks_train_1 = deepwalks(edges, undirected=True, number_walks=args.number_walks,
+                                walk_length=args.walk_length, seed=randint(0, 99999))
+        walks_train_2 = deepwalks(edges, undirected=True, number_walks=args.number_walks,
+                                walk_length=args.walk_length, seed=randint(0, 99999))
         # print('sample subgraph time:', time()-st)
         model.train()
         start_time = time()
@@ -69,19 +69,20 @@ def train():
         # train for users nodes
         # indices = shuffled_indices[count:min(count+args.batch_size, n_train_nodes)]
         # indices = idx_all[shuffled_indices]
-        path_tensor = subgraph_tensor(walks_train, idx_all)
+        path_tensor_1 = subgraph_tensor(walks_train_1, idx_all)
+        path_tensor_2 = subgraph_tensor(walks_train_2, idx_all)
         # target_emb = features[indices]
 
         # loss
         # item_empty = torch.tensor(item_empty, dtype=torch.long).to(device)
-        score = model(idx_all, path_tensor)
+        score, ssl = model(idx_all, path_tensor_1, path_tensor_2)
         # idx_train_shuffled = torch.zeros_like(idx_train)
         # for i, idx in enumerate(idx_train):
         #     idx_train_shuffled[i] = torch.nonzero(indices == idx)
 
         score_train = score[idx_train]
         label_train = labels[idx_train]
-        loss_train = criterion(score_train, label_train)
+        loss_train = criterion(score[idx_train], labels[idx_train], ssl[idx_train])
         loss_train.backward()
         optimizer.step()
 
@@ -97,7 +98,7 @@ def train():
         # idx_val_shuffled = torch.zeros_like(idx_val)
         # for i, idx in enumerate(idx_val):
         #     idx_val_shuffled[i] = torch.nonzero(indices == idx)
-        loss_val = criterion(score[idx_val], labels[idx_val])
+        loss_val = criterion(score[idx_val], labels[idx_val], ssl[idx_val])
         acc_val = accuracy(score[idx_val], labels[idx_val])
         # loss_val, acc_val = eval_on_test_data(idx_val, walks_train)
         print('Epoch: {:04d}'.format(epoch),
@@ -120,8 +121,10 @@ def train():
 
 
 def eval_on_test_data(test_data, seed):
-    walks = deepwalks(edges, undirected=True, number_walks=args.number_walks,
+    walks_1 = deepwalks(edges, undirected=True, number_walks=args.number_walks,
                       walk_length=args.walk_length, seed=seed)
+    walks_2 = deepwalks(edges, undirected=True, number_walks=args.number_walks,
+                      walk_length=args.walk_length, seed=seed+100)
     model.eval()
     with torch.no_grad():
         # indices = test_data
@@ -134,11 +137,19 @@ def eval_on_test_data(test_data, seed):
         # loss = criterion(score, label)
         #
         # acc_val = accuracy(score, label)
-        path_tensor = subgraph_tensor(walks, idx_all)
-        score = model(idx_all, path_tensor)
-        loss = criterion(score[test_data], labels[test_data])
+        path_tensor_1 = subgraph_tensor(walks_1, idx_all)
+        path_tensor_2 = subgraph_tensor(walks_2, idx_all)
+        score, ssl = model(idx_all, path_tensor_1, path_tensor_2)
+        loss = criterion(score[test_data], labels[test_data], ssl[test_data])
         acc = accuracy(score[test_data], labels[test_data])
     return loss, acc
+
+
+def criterion(score, label, ssl):
+    loss = F.cross_entropy(score, label)
+    tmp = torch.sum(ssl)
+    loss = loss + torch.sum(ssl)
+    return loss
 
 
 if __name__ == '__main__':
@@ -183,7 +194,7 @@ if __name__ == '__main__':
 
     # model = recomm(transformer, 2, fea_dim, n_labels).to(device)
     optimizer = torch.optim.Adam(model.parameters(), weight_decay=1e-3, lr=args.lr)
-    criterion = nn.CrossEntropyLoss()
+    # criterion = nn.CrossEntropyLoss()
 
     best_epoch = train()
 

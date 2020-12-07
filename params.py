@@ -7,7 +7,7 @@ import torch
 
 def parse_args():
     parser = argparse.ArgumentParser(description='gnn cnn')
-    parser.add_argument('--cuda', type=int, default=2,
+    parser.add_argument('--cuda', type=int, default=-1,
                         help='Avaiable GPU ID')
     # parser.add_argument('--data_dir', type=str, default='data/graph_amazon_recent_uu_ii.pk',
     #                     help='The address of preprocessed graph.')
