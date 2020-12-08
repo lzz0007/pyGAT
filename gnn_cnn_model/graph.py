@@ -122,13 +122,12 @@ class Graph(defaultdict):
     "Returns the number of nodes in the graph"
     return self.order()
 
-  def random_walk(self, cnt, walks, num_paths, path_length, alpha=0, rand=random.Random(), start=None):
+  def random_walk(self, path_length, alpha=0, rand=random.Random(), start=None):
     """ Returns a truncated random walk.
-
-        path_length: Length of the random walk.
-        alpha: probability of restarts.
-        start: the start node of the random walk.
-    """
+    path_length: Length of the random walk.
+    alpha: probability of restarts.
+    start: the start node of the random walk.
+"""
     G = self
     if start is not None:
       path = [start]
@@ -136,43 +135,69 @@ class Graph(defaultdict):
       # Sampling is uniform w.r.t V, and not w.r.t E
       path = [rand.choice(list(G.keys()))]
 
-    paths = walks[start]
-    count = 0
-    while len(path) < path_length+1:
+    while len(path) < path_length:
       cur = path[-1]
-      tmp = G[cur]
-      if len(G[cur]) == 1 and G[cur][0] == start:
-        path.append(cur)
-      elif len(G[cur]) > 0:
-        sampled_node = rand.choice(G[cur])
-        visited_nodes = []
-        for p in paths:
-          visited_nodes.append(int(p[count]))
-        if len(tmp) < num_paths:
-          if cnt < len(tmp):
-            sampled_node = tmp[cnt]
-          else:
-            while sampled_node == start:
-              sampled_node = rand.choice(G[cur])
-        elif len(tmp) == num_paths and start in G[cur]:
-          while sampled_node == start:
-            sampled_node = rand.choice(G[cur])
-        else:
-          while sampled_node == start or sampled_node in visited_nodes:
-            sampled_node = rand.choice(G[cur])
-        path.append(sampled_node)
-        count += 1
+      if len(G[cur]) > 0:
+        path.append(rand.choice(G[cur]))
         # if rand.random() >= alpha:
         #   path.append(rand.choice(G[cur]))
         # else:
         #   path.append(path[0])
       else:
         break
-    res = [str(node) for node in path]
-    res.pop(0)
-    return res
+    return [str(node) for node in path]
 
-# TODO add build_walks in here
+    # def random_walk(self, cnt, walks, num_paths, path_length, alpha=0, rand=random.Random(), start=None):
+    #   """ Returns a truncated random walk.
+    #
+    #       path_length: Length of the random walk.
+    #       alpha: probability of restarts.
+    #       start: the start node of the random walk.
+    #   """
+    #   G = self
+    #   if start is not None:
+    #     path = [start]
+    #   else:
+    #     # Sampling is uniform w.r.t V, and not w.r.t E
+    #     path = [rand.choice(list(G.keys()))]
+    #
+    #   paths = walks[start]
+    #   count = 0
+    #   while len(path) < path_length+1:
+    #     cur = path[-1]
+    #     tmp = G[cur]
+    #     if len(G[cur]) == 1 and G[cur][0] == start:
+    #       path.append(cur)
+    #     elif len(G[cur]) > 0:
+    #       sampled_node = rand.choice(G[cur])
+    #       visited_nodes = []
+    #       for p in paths:
+    #         visited_nodes.append(int(p[count]))
+    #       if len(tmp) < num_paths:
+    #         if cnt < len(tmp):
+    #           sampled_node = tmp[cnt]
+    #         else:
+    #           while sampled_node == start:
+    #             sampled_node = rand.choice(G[cur])
+    #       elif len(tmp) == num_paths and start in G[cur]:
+    #         while sampled_node == start:
+    #           sampled_node = rand.choice(G[cur])
+    #       else:
+    #         while sampled_node == start or sampled_node in visited_nodes:
+    #           sampled_node = rand.choice(G[cur])
+    #       path.append(sampled_node)
+    #       count += 1
+    #       # if rand.random() >= alpha:
+    #       #   path.append(rand.choice(G[cur]))
+    #       # else:
+    #       #   path.append(path[0])
+    #     else:
+    #       break
+    #   res = [str(node) for node in path]
+    #   res.pop(0)
+    #   return res
+
+  # TODO add build_walks in here
 
 def build_deepwalk_corpus(G, num_paths, path_length, alpha=0,
                       rand=random.Random(0)):
@@ -184,10 +209,12 @@ def build_deepwalk_corpus(G, num_paths, path_length, alpha=0,
     rand.shuffle(nodes)
     for node in nodes:
       if node in walks:
-        walks[node].append(G.random_walk(cnt, walks, num_paths, path_length, rand=rand, alpha=alpha, start=node))
+        # walks[node].append(G.random_walk(cnt, walks, num_paths, path_length, rand=rand, alpha=alpha, start=node))
+        walks[node].append(G.random_walk(path_length, rand=rand, alpha=alpha, start=node))
       else:
         walks[node] = []
-        walks[node].append(G.random_walk(cnt, walks, num_paths, path_length, rand=rand, alpha=alpha, start=node))
+        # walks[node].append(G.random_walk(cnt, walks, num_paths, path_length, rand=rand, alpha=alpha, start=node))
+        walks[node].append(G.random_walk(path_length, rand=rand, alpha=alpha, start=node))
 
   return walks
 
