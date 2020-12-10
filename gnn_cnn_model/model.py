@@ -77,6 +77,7 @@ class Transformer(nn.Module):
         self.predict_layer = nn.Linear(d_model, n_label)
 
         self.cos_sim = nn.CosineSimilarity(dim=1, eps=1e-6)
+        self.tau = 1
 
     def forward(self, targets, path_tensor_1, path_tensor_2):
         # tensor emb
@@ -100,11 +101,12 @@ class Transformer(nn.Module):
         attended_1 = self.trans_emb(target_emb, conv_emb_1)
         attended_2 = self.trans_emb(target_emb, conv_emb_2)
 
-        same = torch.exp(self.cos_sim(attended_1, attended_2))
+        same = torch.exp(self.cos_sim(attended_1, attended_2)/self.tau)
 
-        sim = sim_matrix(attended_1, attended_1).detach()
+        sim = sim_matrix(attended_1, attended_1, tau=1).detach()
         # sim_2 = self.sim_matrix(conv_emb_2, conv_emb_2)
         diff = torch.sum(sim, dim=1)
+        tmp = same/diff
         ssl = -torch.log(same/diff)
         score = self.predict_layer(attended_1)
         return score, ssl

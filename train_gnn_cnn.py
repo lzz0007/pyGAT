@@ -144,8 +144,8 @@ def eval_on_test_data(test_data, seed):
 
 def criterion(score, label, ssl):
     loss = F.cross_entropy(score, label)
-    tmp = torch.sum(ssl)
-    loss = loss*10 + torch.sum(ssl)
+    tmp = torch.sum(ssl/10)
+    loss = loss + torch.sum(ssl/10)
     return loss
 
 
